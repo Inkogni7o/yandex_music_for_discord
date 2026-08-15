@@ -1,0 +1,10 @@
+[project]
+name = "yandex-music-for-discord"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pypresence>=4.6,<5",
+    "yandex-music>=3.0,<4",
+]
