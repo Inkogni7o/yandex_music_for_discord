@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-
+from pydantic import BaseModel, ConfigDict, Field
 from winrt.windows.media.control import (
     GlobalSystemMediaTransportControlsSessionManager,
 )
@@ -8,13 +7,14 @@ from winrt.windows.media.control import (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class NowPlaying:
-    title: str
+class NowPlaying(BaseModel):
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
+
+    title: str = Field(min_length=1)
     artist: str
     album: str
-    position_seconds: float
-    source_app: str
+    position_seconds: float = Field(ge=0)
+    source_app: str = Field(min_length=1)
 
     @property
     def key(self) -> tuple[str, str]:
