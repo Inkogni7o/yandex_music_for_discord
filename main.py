@@ -1,58 +1,77 @@
+import asyncio
 import time
-from datetime import datetime
 
-from pypresence import Presence
-from yandex_music import Client
+from pypresence import AioPresence
+from pypresence.types import ActivityType
+from winrt.windows.media.control import (
+    GlobalSystemMediaTransportControlsSessionManager as MediaSessionManager,
+)
 
-from config import YANDEX_TOKEN, DISCORD_APP_ID
+from config import DISCORD_APP_ID
+from src.core.covers import find_cover_url
+from src.core.media import get_now_playing
 
-UPDATE_INTERVAL_SECONDS = 15
+POLL_INTERVAL_SECONDS = 2
 
-# Yandex token. You can get it from "get_yandex_token.py"
-TOKEN = YANDEX_TOKEN
 
-# This is Aplications ID
-client_id = DISCORD_APP_ID
-
-# Inicalize the RPC
-RPC = Presence(client_id=client_id)
-RPC.connect()
-
-# Inicalize Yandex Music API
-client = Client(TOKEN).init()
-start_time = datetime.now()
-
-# subprocess.Popen(way_to_Yandex_music)
-
-# Work until the program doesnt stopped
-while True:
+async def run() -> None:
     try:
-        queues = client.queues_list()
-        last_queue = client.queue(queues[0].id)
-        last_track_id = last_queue.get_current_track()
-        last_track = last_track_id.fetch_track()
-        artists = ", ".join(last_track.artists_name())
-        title = last_track.title
-        track_link = f"https://music.yandex.ru/album/{last_track['albums'][0]['id']}/track/{last_track['id']}/"
-        image_link = "https://" + last_track.cover_uri.replace("%%", "1000x1000")
+        media_manager = await MediaSessionManager.request_async()
+    except OSError as error:
+        raise RuntimeError(
+            "Windows Media Session недоступен. Запустите программу из обычного "
+            "пользовательского терминала, а не как службу или от имени SYSTEM."
+        ) from error
 
-        timedelta = datetime.now() - start_time
+    rpc = AioPresence(client_id=DISCORD_APP_ID)
+    await rpc.connect()
 
-        RPC.update(
-            details="Слушает: " + title,
-            state="Прошло: " + ":".join(str(timedelta).split(".")[:-1]),
-            large_image=image_link,
-            large_text="Исполнитель: " + artists,
-            small_image="https://sun2.beeline-yaroslavl.userapi.com/s/v1/ig2/ayvI4btzEaAgH5885Sg0"
-            "OwZud3jH3daU2LzP8KfTFvv0yLNzd2RBPc1PBxPrQfrfdC_vreCXfBcYhO8TzFgwJdpK.jpg?"
-            "size=2560x2560&quality=95&type=album",
-        )
+    published_track: tuple[str, str] | None = None
+    presence_is_visible = False
 
-    except:
-        RPC.update(
-            details="Поддерживаются только треки из плейлистов 😥",
-            state="Попробуй включить трек из плейлистов 🙃",
-            large_image="https://c.tenor.com/ZuIbNWpIN5MAAAAC/rias-gremory-high-school-dxd.gif",
-        )
+    try:
+        while True:
+            now_playing = await get_now_playing(media_manager)
 
-    time.sleep(UPDATE_INTERVAL_SECONDS)
+            if now_playing is None:
+                if presence_is_visible:
+                    await rpc.clear()
+                    published_track = None
+                    presence_is_visible = False
+                    print("Воспроизведение остановлено")
+            elif now_playing.key != published_track:
+                cover_url = await asyncio.to_thread(
+                    find_cover_url,
+                    now_playing.title,
+                    now_playing.artist,
+                )
+                started_at = int(time.time() - now_playing.position_seconds)
+
+                await rpc.update(
+                    activity_type=ActivityType.LISTENING,
+                    details=now_playing.title,
+                    state=now_playing.artist or "Неизвестный исполнитель",
+                    start=started_at,
+                    large_image=cover_url,
+                    large_text=now_playing.album or "Яндекс Музыка",
+                )
+
+                published_track = now_playing.key
+                presence_is_visible = True
+                print(
+                    f"Сейчас играет: {now_playing.artist} — {now_playing.title} "
+                    f"[{now_playing.source_app}]"
+                )
+
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
+    finally:
+        if rpc.sock_writer is not None:
+            rpc.sock_writer.close()
+            await rpc.sock_writer.wait_closed()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        pass

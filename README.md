@@ -1,26 +1,28 @@
 # Rich presence for Yandex Music
 
+Shows the track playing in the active Windows media session as Discord Rich
+Presence. Track metadata comes from Windows; Yandex Music is queried
+anonymously only when a new track needs a public cover URL.
+
 ## Setup
 
 1. Install the dependencies:
 
    ```powershell
-   uv sync
+   uv sync --locked
    ```
 
-2. Get a Yandex Music token through OAuth Device Flow:
+2. Copy `config.example.py` to `config.py` and set `DISCORD_APP_ID`. Create the
+   application ID at <https://discord.com/developers/applications/>.
 
-   ```powershell
-   uv run python -m src.core.get_yandex_token
-   ```
+3. Start Discord and play music in a Windows media-enabled application such as
+   Firefox or Edge.
 
-   Open the displayed URL, enter the code, and confirm access.
-
-3. Copy `config.example.py` to `config.py` and fill in `YANDEX_TOKEN` and
-   `DISCORD_APP_ID`. The local `config.py` is excluded from Git.
-
-4. Start Discord and run:
+4. Run the integration from your normal user terminal:
 
    ```powershell
    uv run python main.py
    ```
+
+The program must run in an interactive Windows user session. Windows does not
+expose global media sessions to services or processes running as `SYSTEM`.
