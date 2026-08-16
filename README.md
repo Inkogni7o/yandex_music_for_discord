@@ -23,6 +23,3 @@ anonymously only when a new track needs a public cover URL.
    ```powershell
    uv run python main.py
    ```
-
-The program must run in an interactive Windows user session. Windows does not
-expose global media sessions to services or processes running as `SYSTEM`.

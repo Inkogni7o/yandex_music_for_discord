@@ -53,14 +53,12 @@ async def run() -> None:
                     state=now_playing.artist or "Неизвестный исполнитель",
                     start=started_at,
                     large_image=cover_url,
-                    large_text=now_playing.album or "Яндекс Музыка",
                 )
 
                 published_track = now_playing.key
                 presence_is_visible = True
                 print(
-                    f"Сейчас играет: {now_playing.artist} — {now_playing.title} "
-                    f"[{now_playing.source_app}]"
+                    f"Сейчас играет: {now_playing.artist} — {now_playing.title}"
                 )
 
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
