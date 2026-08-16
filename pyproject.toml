@@ -9,7 +9,9 @@ dependencies = [
     "pyside6>=6.9,<7",
     "pypresence>=4.6,<5",
     "winrt-windows-foundation>=3.2,<4",
+    "winrt-windows-foundation-collections>=3.2,<4",
     "winrt-windows-media-control>=3.2,<4",
+    "winrt-windows-storage>=3.2,<4",
     "yandex-music>=3.0,<4",
 ]
 
