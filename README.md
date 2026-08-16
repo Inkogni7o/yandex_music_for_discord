@@ -1,25 +1,43 @@
-# Rich presence for Yandex Music
+# Yandex Music Rich Presence
 
-Shows the track playing in the active Windows media session as Discord Rich
-Presence. Track metadata comes from Windows; Yandex Music is queried
-anonymously only when a new track needs a public cover URL.
+Десктопное Windows-приложение, которое показывает текущий трек из системной
+медиасессии в Discord Rich Presence. Обложка находится через публичный поиск
+Яндекс Музыки.
 
-## Setup
+## Возможности
 
-1. Install the dependencies:
+- ввод и сохранение Discord Application ID;
+- включение и выключение RPC без перезапуска приложения;
+- постоянное отображение обложки и таймера;
+- настройка интервала обновления;
+- автоматическое включение RPC при запуске;
+- работа из системного трея.
+- защита от повторного запуска с активацией уже открытого окна.
+
+## Запуск для разработки
+
+1. Установите зависимости:
 
    ```powershell
    uv sync --locked
    ```
 
-2. Copy `config.example.py` to `config.py` and set `DISCORD_APP_ID`. Create the
-   application ID at <https://discord.com/developers/applications/>.
-
-3. Start Discord and play music in a Windows media-enabled application such as
-   Firefox or Edge.
-
-4. Run the integration from your normal user terminal:
+2. Запустите приложение:
 
    ```powershell
    uv run python main.py
    ```
+
+Application ID создаётся в
+[Discord Developer Portal](https://discord.com/developers/applications/). Для
+работы RPC должен быть запущен десктопный клиент Discord.
+
+## Сборка EXE
+
+Сборка выполняется на Windows через PyInstaller:
+
+```powershell
+uv run pyinstaller --noconfirm --clean yandex_music_rpc.spec
+```
+
+Готовый файл появится в `dist/YandexMusicRPC.exe`.
