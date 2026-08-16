@@ -8,10 +8,35 @@ from winrt.windows.media.control import (
 )
 
 from config import DISCORD_APP_ID
-from src.core.covers import find_exact_track
-from src.core.media import get_now_playing
+from src.core.covers import YandexTrackMatch, find_exact_track
+from src.core.media import NowPlaying, get_now_playing
 
 POLL_INTERVAL_SECONDS = 2
+SEEK_TOLERANCE_SECONDS = 5
+
+
+def calculate_position_shift(
+    current_position: float,
+    previous_position: float,
+    elapsed_seconds: float,
+) -> float:
+    expected_position = previous_position + elapsed_seconds
+    return current_position - expected_position
+
+
+async def publish_presence(
+    rpc: AioPresence,
+    now_playing: NowPlaying,
+    matched_track: YandexTrackMatch,
+) -> None:
+    started_at = int(time.time() - now_playing.position_seconds)
+    await rpc.update(
+        activity_type=ActivityType.LISTENING,
+        details=now_playing.title,
+        state=now_playing.artist or "Неизвестный исполнитель",
+        start=started_at,
+        large_image=matched_track.cover_url,
+    )
 
 
 async def run() -> None:
@@ -27,10 +52,14 @@ async def run() -> None:
     await rpc.connect()
 
     observed_track: tuple[str, str] | None = None
+    matched_track: YandexTrackMatch | None = None
     presence_is_visible = False
+    last_position_seconds: float | None = None
+    last_position_sampled_at: float | None = None
 
     try:
         while True:
+            sampled_at = time.monotonic()
             now_playing = await get_now_playing(media_manager)
 
             if now_playing is None:
@@ -39,6 +68,9 @@ async def run() -> None:
                     presence_is_visible = False
                     print("Воспроизведение остановлено")
                 observed_track = None
+                matched_track = None
+                last_position_seconds = None
+                last_position_sampled_at = None
             elif now_playing.key != observed_track:
                 observed_track = now_playing.key
                 matched_track = await asyncio.to_thread(
@@ -54,21 +86,28 @@ async def run() -> None:
                         "Медиа пропущено: нет совпадения в Яндекс Музыке — "
                         f"{now_playing.artist} — {now_playing.title}"
                     )
-                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
-                    continue
-
-                started_at = int(time.time() - now_playing.position_seconds)
-
-                await rpc.update(
-                    activity_type=ActivityType.LISTENING,
-                    details=now_playing.title,
-                    state=now_playing.artist or "Неизвестный исполнитель",
-                    start=started_at,
-                    large_image=matched_track.cover_url,
+                else:
+                    await publish_presence(rpc, now_playing, matched_track)
+                    presence_is_visible = True
+                    print(f"Сейчас играет: {now_playing.artist} — {now_playing.title}")
+            elif (
+                matched_track is not None
+                and presence_is_visible
+                and last_position_seconds is not None
+                and last_position_sampled_at is not None
+            ):
+                position_shift = calculate_position_shift(
+                    current_position=now_playing.position_seconds,
+                    previous_position=last_position_seconds,
+                    elapsed_seconds=sampled_at - last_position_sampled_at,
                 )
+                if abs(position_shift) >= SEEK_TOLERANCE_SECONDS:
+                    await publish_presence(rpc, now_playing, matched_track)
+                    print(f"Перемотка: {position_shift:+.1f} с")
 
-                presence_is_visible = True
-                print(f"Сейчас играет: {now_playing.artist} — {now_playing.title}")
+            if now_playing is not None:
+                last_position_seconds = now_playing.position_seconds
+                last_position_sampled_at = sampled_at
 
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
     finally:
