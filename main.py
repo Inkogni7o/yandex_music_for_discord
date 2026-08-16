@@ -8,7 +8,7 @@ from winrt.windows.media.control import (
 )
 
 from config import DISCORD_APP_ID
-from src.core.covers import find_cover_url
+from src.core.covers import find_exact_track
 from src.core.media import get_now_playing
 
 POLL_INTERVAL_SECONDS = 2
@@ -26,7 +26,7 @@ async def run() -> None:
     rpc = AioPresence(client_id=DISCORD_APP_ID)
     await rpc.connect()
 
-    published_track: tuple[str, str] | None = None
+    observed_track: tuple[str, str] | None = None
     presence_is_visible = False
 
     try:
@@ -36,15 +36,27 @@ async def run() -> None:
             if now_playing is None:
                 if presence_is_visible:
                     await rpc.clear()
-                    published_track = None
                     presence_is_visible = False
                     print("Воспроизведение остановлено")
-            elif now_playing.key != published_track:
-                cover_url = await asyncio.to_thread(
-                    find_cover_url,
+                observed_track = None
+            elif now_playing.key != observed_track:
+                observed_track = now_playing.key
+                matched_track = await asyncio.to_thread(
+                    find_exact_track,
                     now_playing.title,
                     now_playing.artist,
                 )
+                if matched_track is None:
+                    if presence_is_visible:
+                        await rpc.clear()
+                        presence_is_visible = False
+                    print(
+                        "Медиа пропущено: нет совпадения в Яндекс Музыке — "
+                        f"{now_playing.artist} — {now_playing.title}"
+                    )
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                    continue
+
                 started_at = int(time.time() - now_playing.position_seconds)
 
                 await rpc.update(
@@ -52,14 +64,11 @@ async def run() -> None:
                     details=now_playing.title,
                     state=now_playing.artist or "Неизвестный исполнитель",
                     start=started_at,
-                    large_image=cover_url,
+                    large_image=matched_track.cover_url,
                 )
 
-                published_track = now_playing.key
                 presence_is_visible = True
-                print(
-                    f"Сейчас играет: {now_playing.artist} — {now_playing.title}"
-                )
+                print(f"Сейчас играет: {now_playing.artist} — {now_playing.title}")
 
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
     finally:
