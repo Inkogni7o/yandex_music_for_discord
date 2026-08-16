@@ -28,6 +28,7 @@ exe = EXE(
     analysis.datas,
     [],
     name="YandexMusicRPC",
+    icon="src/app/static/app.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
