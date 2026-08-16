@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 from winrt.windows.media.control import (
     GlobalSystemMediaTransportControlsSessionManager,
@@ -37,11 +39,17 @@ async def get_now_playing(
         return None
 
     timeline = session.get_timeline_properties()
+    updated_at = timeline.last_updated_time
+    elapsed_since_update = max(
+        0.0,
+        (datetime.now(updated_at.tzinfo) - updated_at).total_seconds(),
+    )
+    position_seconds = timeline.position.total_seconds() + elapsed_since_update
 
     return NowPlaying(
         title=properties.title.strip(),
         artist=properties.artist.strip(),
         album=properties.album_title.strip(),
-        position_seconds=max(0.0, timeline.position.total_seconds()),
+        position_seconds=max(0.0, position_seconds),
         source_app=session.source_app_user_model_id,
     )

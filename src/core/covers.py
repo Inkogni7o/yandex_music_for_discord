@@ -1,58 +1,58 @@
 import re
 import unicodedata
-from difflib import SequenceMatcher
 from functools import lru_cache
 
+from pydantic import BaseModel, ConfigDict, Field
 from yandex_music import Client, Track
-from yandex_music.exceptions import YandexMusicError
 
-MINIMUM_MATCH_SCORE = 0.7
 _music_client = Client()
 
 
+class YandexTrackMatch(BaseModel):
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
+
+    title: str = Field(min_length=1)
+    artists: tuple[str, ...] = Field(min_length=1)
+    cover_url: str | None = None
+
+
 def _normalize(value: str) -> str:
-    value = unicodedata.normalize("NFKC", value).casefold().replace("ё", "е")
+    value = unicodedata.normalize("NFKC", value).casefold().replace("\u0451", "\u0435")
     return " ".join(re.findall(r"\w+", value))
 
 
-def _similarity(left: str, right: str) -> float:
-    return SequenceMatcher(None, _normalize(left), _normalize(right)).ratio()
-
-
-def _match_score(track: Track, title: str, artist: str) -> float:
-    title_score = _similarity(title, track.title)
-    if not artist:
-        return title_score
+def _is_exact_match(track: Track, title: str, artist: str) -> bool:
+    if not artist.strip():
+        return False
 
     candidate_artists = ", ".join(track.artists_name())
-    artist_score = _similarity(artist, candidate_artists)
-    return title_score * 0.7 + artist_score * 0.3
+    return _normalize(track.title) == _normalize(title) and _normalize(
+        candidate_artists
+    ) == _normalize(artist)
 
 
 @lru_cache(maxsize=256)
-def find_cover_url(title: str, artist: str) -> str | None:
-    try:
-        search = _music_client.search(
-            f"{artist} {title}".strip(),
-            type_="track",
-        )
-    except YandexMusicError as error:
-        print(f"Не удалось найти обложку: {error}")
-        return None
-
+def find_exact_track(title: str, artist: str) -> YandexTrackMatch | None:
+    search = _music_client.search(
+        f"{artist} {title}".strip(),
+        type_="track",
+    )
     if search is None or search.tracks is None:
         return None
 
-    candidates = [
-        (_match_score(track, title, artist), track)
-        for track in search.tracks.results
-        if track.cover_uri
-    ]
-    if not candidates:
+    track = next(
+        (
+            track
+            for track in search.tracks.results
+            if _is_exact_match(track, title, artist)
+        ),
+        None,
+    )
+    if track is None:
         return None
 
-    score, track = max(candidates, key=lambda candidate: candidate[0])
-    if score < MINIMUM_MATCH_SCORE:
-        return None
-
-    return track.get_cover_url("1000x1000")
+    return YandexTrackMatch(
+        title=track.title,
+        artists=tuple(track.artists_name()),
+        cover_url=(track.get_cover_url("1000x1000") if track.cover_uri else None),
+    )
